@@ -10,6 +10,10 @@ const PostSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Please provide the creator']
   },
+  creatorImage: {
+    type: String,
+    default: ''
+  },
   description: {
     type: String,
     required: [true, 'Please provide a description']

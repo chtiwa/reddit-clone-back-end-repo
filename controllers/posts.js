@@ -1,5 +1,6 @@
 const mongoose = require('mongoose')
 const Post = require('../models/Post')
+const User = require('../models/User')
 const jwt = require('jsonwebtoken')
 const CustomAPIError = require('../errors')
 
@@ -64,8 +65,6 @@ const getPostsBySearch = async (req, res) => {
   // the recommendation system functions here (trending)
   try {
     const title = new RegExp(search, "i")
-    // find posts by title 
-    // const posts = await Post.find({ $or: [{ title }, { tags: { $in: tags.split(',') } }] })
     const posts = await Post.find({ title: { $in: title } }).limit(10)
     if (!posts) {
       return res.status(404).json({ message: `Page not found` })
@@ -78,20 +77,33 @@ const getPostsBySearch = async (req, res) => {
 
 const getPostsByCreator = async (req, res) => {
   try {
-    const { page } = req.query
+    const { page, creator } = req.query
+
+    let posts
+    // to determine how many pages there is
+    if (creator === undefined) {
+      posts = await Post.find({ createdBy: req.user.userId })
+    } else {
+      posts = await Post.find({ creator: creator })
+    }
+
     const LIMIT = 10
-    let posts = await Post.find({ createdBy: req.user.userId })
     const total = posts.length
     const startIndex = (Number(page) - 1) * LIMIT
     const pages = Math.ceil(total / LIMIT)
 
-    if (page > pages) {
-      return res.status(404).json({ message: `No such page exists` })
+    if (creator === undefined) {
+      posts = await Post.find({ createdBy: req.user.userId }).sort({ _id: -1 }).limit(LIMIT).skip(startIndex)
+    } else {
+      posts = await Post.find({ creator: creator }).sort({ _id: -1 }).limit(LIMIT).skip(startIndex)
     }
 
-    posts = await Post.find({ createdBy: req.user.userId }).sort({ _id: -1 }).limit(LIMIT).skip(startIndex)
-
-    res.status(200).json({ posts: posts, pages: pages })
+    let sameUser = false
+    if (req.user.userId === posts[0]?.createdBy.toString()) {
+      sameUser = true
+      // console.log('same user')
+    }
+    res.status(200).json({ posts: posts, pages: pages, sameUser: sameUser })
   } catch (error) {
     res.status(500).json({ message: error.message })
   }
@@ -109,10 +121,11 @@ const getSinglePost = async (req, res) => {
 
 const createPost = async (req, res) => {
   try {
-    // console.log('create post')
-    // console.log(req)
-    // let body = { ...req.body, req.body.description.trim() }
-    const post = await Post.create({ ...req.body, description: req.body.description.trim(), createdBy: req.user.userId, creator: req.user.name, createdAt: new Date().toISOString() })
+    const user = await User.findById({ _id: req.user.userId })
+    if (!user) {
+      return res.status(404).json({ message: `User wasn't found!` })
+    }
+    const post = await Post.create({ ...req.body, description: req.body.description.trim(), createdBy: req.user.userId, creator: req.user.name, createdAt: new Date().toISOString(), creatorImage: user.image })
     res.status(201).json(post)
   } catch (error) {
     res.status(500).json(error)
@@ -143,9 +156,6 @@ const deletePost = async (req, res) => {
 const likePost = async (req, res) => {
   try {
     const { id } = req.params
-    // const token = req.cookies.token
-    // const payload = jwt.verify(token, process.env.JWT_SECRET)
-    // console.log(payload)
     if (!req.user.userId) {
       return res.status(401).json({ message: `Unauthorized` })
     }
@@ -158,18 +168,20 @@ const likePost = async (req, res) => {
 
     const index = post.likes.findIndex((id) => id === String(req.user.userId))
 
-    // const value = post.likes.find((id) => id === String(req.user.userId))
-    // console.log(value)
+    let hasLikedPost
     if (index === -1) {
       post.likes.push(req.user.userId)
+      hasLikedPost = true
     } else {
       post.likes = post.likes.filter((id) => id !== String(req.user.userId))
+      hasLikedPost = false
     }
 
     const likedPost = await Post.findByIdAndUpdate(id, post, { new: true })
     // console.log(likedPost.likes.length)
 
-    res.status(200).json(likedPost)
+    res.status(200).json({ likedPost: likedPost, likes: likedPost.likes, hasLikedPost })
+    // res.status(200).json({ likedPost, hasLikedPost })
   } catch (error) {
     res.status(500).json({ message: error.message })
   }
@@ -179,18 +191,41 @@ const commentPost = async (req, res) => {
   try {
     const { id } = req.params
     const { comment } = req.body
-    console.log(req.body)
+    // console.log(req.body)
     const post = await Post.findById(id)
+    const user = await User.findById(req.user.userId)
+
+    if (!user) {
+      return res.status(404).json({ message: `User wasn't found!` })
+    }
 
     if (comment.length > 0) {
-      post.comments.push({ comment: comment, creatorImage: req.user.image })
+      post.comments.push({ comment: comment, creatorImage: user.image })
     } else {
       return res.status(500).json({ message: `You can't make an empty comment` })
     }
 
     const updatedPost = await Post.findByIdAndUpdate(id, post, { new: true })
 
-    res.status(200).json(updatedPost)
+    res.status(200).json({ post: updatedPost, comments: updatedPost.comments })
+    // res.status(200).json(updatedPost)
+  } catch (error) {
+    res.status(500).json({ message: error.message })
+  }
+}
+
+const getRandomTags = async (req, res) => {
+  try {
+    let tags = []
+    const posts = await Post.find({}).limit(10)
+    posts.forEach(post => {
+      post.tags.forEach(tag => {
+        if (tags.length <= 6) {
+          tags.push(tag)
+        }
+      })
+    })
+    res.status(200).json(tags)
   } catch (error) {
     res.status(500).json({ message: error.message })
   }
@@ -206,5 +241,6 @@ module.exports = {
   updatePost,
   deletePost,
   likePost,
-  commentPost
+  commentPost,
+  getRandomTags
 }

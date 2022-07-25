@@ -10,7 +10,8 @@ const {
   updatePost,
   deletePost,
   likePost,
-  commentPost
+  commentPost,
+  getRandomTags
 } = require('../controllers/posts')
 const authentication = require('../middleware/authentication')
 
@@ -20,6 +21,7 @@ const authentication = require('../middleware/authentication')
 router.route('/').get(getPosts).post(authentication, createPost)
 router.route('/find').get(getPostsBySearch)
 router.route('/user/myposts').get(authentication, getPostsByCreator)
+router.route('/tags').get(getRandomTags)
 
 // to not get the error of castObjectId
 router.route('/r/:tag').get(getSubredditPosts)
