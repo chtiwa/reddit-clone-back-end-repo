@@ -18,8 +18,9 @@ const PostSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Please provide a description']
   },
-  image: {
-    type: String
+  file: {
+    format: String,
+    url: String
   },
   tags: {
     type: [String],

@@ -1,30 +1,25 @@
 const mongoose = require('mongoose')
 const Post = require('../models/Post')
 const User = require('../models/User')
-const jwt = require('jsonwebtoken')
+// const jwt = require('jsonwebtoken')
 const CustomAPIError = require('../errors')
-
-// subreddit (by tags)
-// search on the navbar search (modal)
-// get posts for the home page
+const cloudinary = require('../utils/cloudinary')
+const Busboy = require('busboy')
 
 const getPosts = async (req, res) => {
   // search engine by tags
   // grab the UserSchema 
   // get diffrent users and select the tags that the user has searched for
-  // make one get posts based on the search query i.e : creator tag 
   try {
     const { page } = req.query
-    // console.log('page', page)
     const LIMIT = 10
     const startIndex = (Number(page) - 1) * LIMIT
 
     const total = await Post.countDocuments({})
 
-    const posts = await Post.find().sort({ _id: -1 }).limit(LIMIT).skip(startIndex)
+    const posts = await Post.find().sort({ createdAt: 1 }).limit(LIMIT).skip(startIndex)
 
     const pages = Math.ceil(total / LIMIT)
-    // res.status(200).json({ posts: posts, page: Number(page), pages: pages })
     res.status(200).json({ posts: posts, pages: pages })
   } catch (error) {
     res.status(500).json({ message: error.message })
@@ -35,7 +30,6 @@ const getSubredditPosts = async (req, res) => {
   try {
     const { page } = req.query
     const { tag } = req.params
-    // console.log(tag)
     const LIMIT = 10
     const startIndex = (Number(page) - 1) * LIMIT
 
@@ -53,7 +47,6 @@ const getSubredditPosts = async (req, res) => {
 
     res.status(200).json({ posts: posts, pages: pages })
   } catch (error) {
-    // throw new CustomAPIError.BadRequestError('Bad request')
     res.status(500).json({ message: error.message })
   }
 }
@@ -64,11 +57,14 @@ const getPostsBySearch = async (req, res) => {
   // this would be in the modal so the limit would be ten posts order by id
   // the recommendation system functions here (trending)
   try {
-    const title = new RegExp(search, "i")
-    const posts = await Post.find({ title: { $in: title } }).limit(10)
+    const posts = await Post.aggregate([
+      { $match: { title: search } },
+      { $project: { _id: 1, title: 1, image: 1, tags: 1, description: 1 } }
+    ])
     if (!posts) {
       return res.status(404).json({ message: `Page not found` })
     }
+
     res.status(200).json(posts)
   } catch (error) {
     res.status(500).json({ message: error.message })
@@ -111,21 +107,58 @@ const getPostsByCreator = async (req, res) => {
 
 const getSinglePost = async (req, res) => {
   try {
-    const { id } = req.params
+    const { id, userId } = req.params
     const post = await Post.findById(id)
-    res.status(200).json(post)
+    let hasLikedPost = false
+    if (userId) {
+      const index = post.likes.findIndex((id) => id === String(userId))
+      if (index !== -1) hasLikedPost = true
+    }
+
+    res.status(200).json({ post, hasLikedPost })
   } catch (error) {
     res.status(500).json({ message: error.message })
   }
 }
 
+// const uploadImage = async (req, res) => {
+//   try {
+//     // console.log(req.file)
+//     const options = {
+//       // resource_type: "video",
+//       use_filename: true,
+//       unique_filename: false,
+//       overwrite: true,
+//     }
+//     const result = await cloudinary.uploader.upload(req.file.path, options)
+//     res.status(201).json({ message: result.secure_url })
+//   } catch (error) {
+//     res.status(500).json({ message: error.message })
+//   }
+// }
+
 const createPost = async (req, res) => {
   try {
+    // console.log('file', req.file)
     const user = await User.findById({ _id: req.user.userId })
     if (!user) {
       return res.status(404).json({ message: `User wasn't found!` })
     }
-    const post = await Post.create({ ...req.body, description: req.body.description.trim(), createdBy: req.user.userId, creator: req.user.name, createdAt: new Date().toISOString(), creatorImage: user.image })
+    const options = {
+      folder: "home/reddit-clone",
+      resource_type: "auto",
+      use_filename: true,
+      unique_filename: false,
+      overwrite: true,
+    }
+    let result
+    if (req?.file?.path) {
+      result = await cloudinary.uploader.upload(req.file.path, options)
+    }
+    // console.log(result)
+    let url = result?.secure_url || ''
+    let format = result?.format || ''
+    const post = await Post.create({ ...req.body, description: req.body.description.trim(), createdBy: req.user.userId, creator: req.user.name, createdAt: new Date().toISOString(), file: { url: url, format: format }, creatorImage: user.image })
     res.status(201).json(post)
   } catch (error) {
     res.status(500).json(error)
@@ -134,9 +167,9 @@ const createPost = async (req, res) => {
 
 const updatePost = async (req, res) => {
   try {
-    console.log('update post')
+    // console.log('update post')
     const { id } = req.params
-    const post = await Post.findByIdAndUpdate(id, { ...req.body }, { new: true })
+    const post = await Post.findByIdAndUpdate(id, { ...req.body.post }, { new: true })
     res.status(201).json(post)
   } catch (error) {
     res.status(500).json({ message: error.message })
@@ -146,8 +179,11 @@ const updatePost = async (req, res) => {
 const deletePost = async (req, res) => {
   try {
     const { id } = req.params
-    await Post.findByIdAndDelete(id)
-    res.status(201).json({ message: `Post was deleted successfully` })
+    const post = await Post.findByIdAndDelete(id)
+    // console.log(id)
+    // send the id for the redux state filter
+    // console.log(post._id)
+    res.status(201).json(post._id)
   } catch (error) {
     res.status(500).json({ message: error.message })
   }
@@ -164,26 +200,28 @@ const likePost = async (req, res) => {
       return res.status(404).json({ message: `this id : ${id} is not valid` })
     }
 
-    const post = await Post.findById(id)
-
-    const index = post.likes.findIndex((id) => id === String(req.user.userId))
-
-    let hasLikedPost
-    if (index === -1) {
-      post.likes.push(req.user.userId)
-      hasLikedPost = true
-    } else {
-      post.likes = post.likes.filter((id) => id !== String(req.user.userId))
-      hasLikedPost = false
-    }
-
-    const likedPost = await Post.findByIdAndUpdate(id, post, { new: true })
-    // console.log(likedPost.likes.length)
-
-    res.status(200).json({ likedPost: likedPost, likes: likedPost.likes, hasLikedPost })
-    // res.status(200).json({ likedPost, hasLikedPost })
+    const likedPost = await Post.findByIdAndUpdate({ _id: id }, { $push: { likes: req.user.userId } }, { new: true })
+    res.status(200).json({ likedPost: likedPost, hasLikedPost: true })
   } catch (error) {
     res.status(500).json({ message: error.message })
+  }
+}
+
+const unlikePost = async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!req.user.userId) {
+      return res.status(401).json({ message: `Unauthorized` })
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ message: `this id : ${id} is not valid` })
+    }
+
+    const unlikedPost = await Post.findByIdAndUpdate({ _id: id }, { $pull: { likes: req.user.userId } }, { new: true })
+    res.status(200).json({ unlikedPost: unlikedPost, hasLikedPost: false })
+  } catch (error) {
+    res.status(500).json({ message: error.massage })
   }
 }
 
@@ -191,24 +229,30 @@ const commentPost = async (req, res) => {
   try {
     const { id } = req.params
     const { comment } = req.body
-    // console.log(req.body)
-    const post = await Post.findById(id)
+    // const post = await Post.findById(id)
     const user = await User.findById(req.user.userId)
 
     if (!user) {
       return res.status(404).json({ message: `User wasn't found!` })
     }
 
-    if (comment.length > 0) {
-      post.comments.push({ comment: comment, creatorImage: user.image })
-    } else {
-      return res.status(500).json({ message: `You can't make an empty comment` })
-    }
+    // if (comment.length > 0) {
+    //   post.comments.push({ comment: comment, creatorImage: user.image })
+    // } else {
+    //   return res.status(500).json({ message: `You can't make an empty comment` })
+    // }
 
-    const updatedPost = await Post.findByIdAndUpdate(id, post, { new: true })
+    // const updatedPost = await Post.findByIdAndUpdate(id, post, { new: true })
+    const commentedPost = await Post.findByIdAndUpdate({ _id: id }, {
+      $push: {
+        comments: {
+          comment: comment,
+          creatorImage: user.image
+        }
+      }
+    }, { new: true })
 
-    res.status(200).json({ post: updatedPost, comments: updatedPost.comments })
-    // res.status(200).json(updatedPost)
+    res.status(200).json({ post: commentedPost })
   } catch (error) {
     res.status(500).json({ message: error.message })
   }
@@ -217,11 +261,13 @@ const commentPost = async (req, res) => {
 const getRandomTags = async (req, res) => {
   try {
     let tags = []
-    const posts = await Post.find({}).limit(10)
+    const posts = await Post.find({ creatdAt: 1 }).limit(10)
     posts.forEach(post => {
-      post.tags.forEach(tag => {
+      post.tags.forEach(postTag => {
         if (tags.length <= 6) {
-          tags.push(tag)
+          if (tags.find(tag => tag === postTag) === undefined) {
+            tags.push(postTag)
+          }
         }
       })
     })
@@ -241,6 +287,8 @@ module.exports = {
   updatePost,
   deletePost,
   likePost,
+  unlikePost,
   commentPost,
+  // uploadImage,
   getRandomTags
 }

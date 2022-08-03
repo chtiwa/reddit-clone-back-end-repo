@@ -21,10 +21,6 @@ const UserSchema = new mongoose.Schema({
     // chekced in the input
     minlength: 6
   },
-  // isAdmin: {
-  //   type: Boolean,
-  //   default: false
-  // },
   image: {
     type: String,
     default: ''
@@ -50,5 +46,18 @@ UserSchema.methods.comparePassword = async function (candidatePassword) {
   const isMatch = await bcryptjs.compare(candidatePassword, this.password)
   return isMatch
 }
+
+UserSchema.methods.resetPasswordJWT = function () {
+  return jwt.sign({ userId: this._id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_PSW_RESET_LIFETIME })
+}
+
+// UserSchema.methods.getResetPasswordToken = function () {
+//   const resetToken = crypto.randomBytes(20).toString("hex")
+
+//   // this.resetPasswordToken = crypto.createHash("sha256").update(reetToken).digest("hex")
+//   this.resetPasswordToken = resetToken
+//   this.resetPasswordExpire = Date.now() + (10000 * 60 * 60 * 24)
+//   return resetToken
+// }
 
 module.exports = mongoose.model('User', UserSchema) 
