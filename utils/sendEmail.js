@@ -8,10 +8,7 @@ const sendEmail = (options) => {
     from: process.env.OUTLOOK_EMAIL,
     to: options.to,
     subject: 'Password reset',
-    // html: '<b>This is bold text</b>',
     text: options.text,
-    // onError: (e) => console.log(e),
-    // onSuccess: (i) => console.log(i)
     onError: (e) => (e),
     onSuccess: (i) => (i)
   })
