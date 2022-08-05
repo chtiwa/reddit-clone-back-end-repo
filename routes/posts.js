@@ -34,6 +34,6 @@ router.route('/unlikepost/:id').patch(authentication, unlikePost)
 router.route('/commentpost/:id').patch(authentication, commentPost)
 
 router.route('/:id/:userId').get(getSinglePost)
-router.route('/:id').patch(authentication, updatePost).delete(authentication, deletePost)
+router.route('/:id').patch(authentication, multer.single('file'), updatePost).delete(authentication, deletePost)
 
 module.exports = router

@@ -4,7 +4,6 @@ const User = require('../models/User')
 // const jwt = require('jsonwebtoken')
 const CustomAPIError = require('../errors')
 const cloudinary = require('../utils/cloudinary')
-const Busboy = require('busboy')
 
 const getPosts = async (req, res) => {
   // search engine by tags
@@ -19,7 +18,12 @@ const getPosts = async (req, res) => {
 
     const posts = await Post.find().sort({ createdAt: 1 }).limit(LIMIT).skip(startIndex)
 
+    // the pages defines when to stop fetching new data
     const pages = Math.ceil(total / LIMIT)
+    if (page > pages + 1) {
+      return res.status(400).json({ message: `No more posts to be displayed` })
+      // return
+    }
     res.status(200).json({ posts: posts, pages: pages })
   } catch (error) {
     res.status(500).json({ message: error.message })
@@ -40,7 +44,7 @@ const getSubredditPosts = async (req, res) => {
     const total = posts.length
     const pages = Math.ceil(total / LIMIT)
 
-    if (page > pages) {
+    if (page > pages + 1) {
       return res.status(404).json({ message: `Page not found!` })
     }
     posts = await Post.find({ tags: { $in: tag } }).sort({ _id: -1 }).limit(LIMIT).skip(startIndex)
@@ -59,7 +63,7 @@ const getPostsBySearch = async (req, res) => {
   try {
     const posts = await Post.aggregate([
       { $match: { title: search } },
-      { $project: { _id: 1, title: 1, image: 1, tags: 1, description: 1 } }
+      { $project: { _id: 1, title: 1, file: 1, tags: 1, description: 1 } }
     ])
     if (!posts) {
       return res.status(404).json({ message: `Page not found` })
@@ -169,7 +173,24 @@ const updatePost = async (req, res) => {
   try {
     // console.log('update post')
     const { id } = req.params
-    const post = await Post.findByIdAndUpdate(id, { ...req.body.post }, { new: true })
+    const user = await User.findById({ _id: req.user.userId })
+    if (!user) {
+      return res.status(404).json({ message: `User wasn't found!` })
+    }
+    const options = {
+      folder: "home/reddit-clone",
+      resource_type: "auto",
+      use_filename: true,
+      unique_filename: false,
+      overwrite: true,
+    }
+    let result
+    if (req?.file?.path) {
+      result = await cloudinary.uploader.upload(req.file.path, options)
+    }
+    let url = result?.secure_url || ''
+    let format = result?.format || ''
+    const post = await Post.findByIdAndUpdate(id, { ...req.body, file: { url: url, format: format } }, { new: true })
     res.status(201).json(post)
   } catch (error) {
     res.status(500).json({ message: error.message })
@@ -179,11 +200,9 @@ const updatePost = async (req, res) => {
 const deletePost = async (req, res) => {
   try {
     const { id } = req.params
-    const post = await Post.findByIdAndDelete(id)
-    // console.log(id)
+    await Post.findByIdAndDelete(id)
     // send the id for the redux state filter
-    // console.log(post._id)
-    res.status(201).json(post._id)
+    res.status(201).json(id)
   } catch (error) {
     res.status(500).json({ message: error.message })
   }
