@@ -12,6 +12,7 @@ const helmet = require('helmet')
 const xss = require('xss-clean')
 const rateLimiter = require('express-rate-limit')
 
+// 
 app.use(cors({ origin: [`https://reddit-clone-chtiwa.herokuapp.com`], credentials: true }))
 app.use(rateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
