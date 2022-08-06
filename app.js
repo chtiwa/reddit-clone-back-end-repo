@@ -29,7 +29,7 @@ app.use('/auth', authRoutes)
 app.use(errorHandler)
 
 
-app.use(express.static(path.join(__dirname, "/client")));
+app.use(express.static(path.join(__dirname, "/client/build")));
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '/client/build', 'index.html'));
