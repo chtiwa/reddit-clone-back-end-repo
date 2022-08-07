@@ -14,7 +14,7 @@ const xss = require('xss-clean')
 const rateLimiter = require('express-rate-limit')
 
 // 
-app.use(cors({ origin: [`https://reddit-clone-chtiwa.netlify.app`], credentials: true }))
+app.use(cors({ origin: [`https://reddit-clone-chtiwa-frontend.netlify.app`], credentials: true }))
 app.use(rateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 500, // limit each IP to 100 requests per windowMs
