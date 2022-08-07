@@ -1,7 +1,0 @@
-[build]
-    functions="routes"
-
-[[redirects]]
-    to="/api:splat"
-    from="/*"
-    status=200
