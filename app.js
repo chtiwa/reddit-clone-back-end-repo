@@ -14,7 +14,7 @@ const xss = require('xss-clean')
 const rateLimiter = require('express-rate-limit')
 
 // 
-app.use(cors({ origin: [`https://reddit-clone-chtiwa.herokuapp.com`], credentials: true }))
+app.use(cors({ origin: [`https://reddit-clone-chtiwa.netlify.app`], credentials: true }))
 app.use(rateLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 500, // limit each IP to 100 requests per windowMs
@@ -24,17 +24,9 @@ app.use(xss())
 app.use(cookieParser())
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
-app.use('/posts', postsRoutes)
-app.use('/auth', authRoutes)
-// error handle ==> last middleware
+app.use('/api/posts', postsRoutes)
+app.use('/api/auth', authRoutes)
 app.use(errorHandler)
-
-
-app.use(express.static(path.join(__dirname, "/client/build")));
-
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '/client/build', 'index.html'));
-});
 
 const port = process.env.PORT || 5000
 
