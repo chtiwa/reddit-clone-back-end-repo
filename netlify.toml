@@ -1,5 +1,5 @@
 [build]
-    functions="functions"
+    functions="routes"
 
 [[redirects]]
     to="/api:splat"
